@@ -1,0 +1,16 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {"major": 3, "minor": 21, "patch": 0},
+  "configurePresets": [
+    {"name": "linux-release", "displayName": "Linux x86_64 Release", "generator": "Unix Makefiles", "binaryDir": "${sourceDir}/build-release", "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux"}, "cacheVariables": {"CMAKE_BUILD_TYPE": "Release", "BUILD_TESTING": "ON"}},
+    {"name": "windows-x64", "displayName": "Windows x64 / MSVC / Qt 6", "generator": "Visual Studio 17 2022", "architecture": "x64", "binaryDir": "${sourceDir}/build-windows", "condition": {"type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows"}, "cacheVariables": {"BUILD_TESTING": "ON"}}
+  ],
+  "buildPresets": [
+    {"name": "linux-release", "configurePreset": "linux-release"},
+    {"name": "windows-x64", "configurePreset": "windows-x64", "configuration": "Release"}
+  ],
+  "testPresets": [
+    {"name": "linux-release", "configurePreset": "linux-release", "output": {"outputOnFailure": true}},
+    {"name": "windows-x64", "configurePreset": "windows-x64", "configuration": "Release", "output": {"outputOnFailure": true}}
+  ]
+}

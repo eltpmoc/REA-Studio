@@ -1,0 +1,177 @@
+name: Build, verify and package alpha
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: System build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential clang qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev python3
+      - name: Licenses, source inventory and 107 dependency hashes
+        run: python3 scripts/release.py audit
+      - name: Configure
+        shell: bash
+        run: |
+          if [ '${{ matrix.compiler }}' = clang ]; then
+            export CC=clang CXX=clang++
+          else
+            export CC=gcc CXX=g++
+          fi
+          cmake --preset linux-release
+      - name: Build
+        run: cmake --build --preset linux-release --parallel 2
+      - name: CTest (all applicable tests)
+        run: ctest --preset linux-release --output-junit release-tests.xml
+      - name: Source and Linux system-Qt distribution
+        if: matrix.compiler == 'gcc'
+        run: python3 scripts/release.py linux --build build-release --output dist
+      - name: Build fuzz target and run bounded campaign
+        if: matrix.compiler == 'clang'
+        shell: bash
+        run: |
+          cmake -S . -B build-fuzz -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=OFF -DREA_BUILD_LIBFUZZER=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          cmake --build build-fuzz --target rea_elf_fuzzer --parallel 2
+          ./build-release/rea_elf_fuzz_smoke --write-corpus build-fuzz/corpus
+          cp build-release/smoke.elf build-fuzz/corpus/symbols.elf
+          mkdir -p build-fuzz/artifacts
+          ASAN_OPTIONS=detect_leaks=0 ./build-fuzz/rea_elf_fuzzer build-fuzz/corpus -runs=10000 -seed=5391681 -max_len=65536 -timeout=2 -rss_limit_mb=512 -artifact_prefix=build-fuzz/artifacts/ > build-fuzz/fuzz-run.log 2>&1
+      - name: Retain reports even after failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: reports-linux-${{ matrix.compiler }}
+          retention-days: 30
+          path: |
+            build-release/Testing/Temporary/LastTest.log
+            build-release/*tests.xml
+            build-release/*workspace*.png
+            build-release/workspace-*.png
+            build-release/REA_BUILD_METADATA.txt
+            build-fuzz/fuzz-run.log
+            build-fuzz/artifacts/
+          if-no-files-found: warn
+      - name: Retain validated packages (no release publication)
+        if: success() && matrix.compiler == 'gcc'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: packages-linux-x86_64
+          retention-days: 30
+          path: dist/
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: jurplel/install-qt-action@d325aaf2a8baeeda41ad0b5d39f84a6af9bcf005 # v4.3.0
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          archives: qtbase
+          cache: true
+      - name: Licenses and dependency hashes (byte-preserving checkout)
+        run: python scripts/release.py audit
+      - name: Configure MSVC x64
+        run: cmake --preset windows-x64
+      - name: Build MSVC Release
+        run: cmake --build --preset windows-x64 --parallel 2
+      - name: CTest Windows (12 applicable tests; 5 require Linux /usr/bin/true)
+        run: ctest --preset windows-x64 --output-junit windows-release-tests.xml
+      - name: Download and verify corresponding QtBase source
+        run: python scripts/fetch-qt-source.py build-windows/qt-source
+      - name: Deploy, inspect, smoke test and ZIP
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw 'MSVC toolchain unavailable' }
+          & "$vs\Common7\Tools\Launch-VsDevShell.ps1" -Arch amd64 -HostArch amd64 -SkipAutomaticLocation
+          ./scripts/package-windows.ps1 -QtRoot $env:QT_ROOT_DIR -QtSource build-windows/qt-source/qtbase-everywhere-src-6.8.3.tar.xz
+      - name: Retain Windows reports even after failure
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: reports-windows-x64
+          retention-days: 30
+          path: |
+            build-windows/Testing/Temporary/LastTest.log
+            build-windows/*tests.xml
+            build-windows/workspace-*.png
+            build-windows/*workspace*.png
+            build-windows/REA_BUILD_METADATA.txt
+            build-windows/windows-dependencies.txt
+          if-no-files-found: warn
+      - name: Retain Windows ZIP only after all required checks succeed
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: packages-windows-x64
+          retention-days: 30
+          path: dist/
+          if-no-files-found: error
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [address-undefined, thread]
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=0
+      TSAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y cmake build-essential clang qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev python3
+      - run: python3 scripts/release.py audit
+      - name: Configure instrumentation
+        shell: bash
+        run: |
+          if [ '${{ matrix.mode }}' = thread ]; then
+            rea_sanitizers=thread
+          else
+            rea_sanitizers=address,undefined
+          fi
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-fsanitize=$rea_sanitizers -fno-omit-frame-pointer" -DCMAKE_CXX_FLAGS="-fsanitize=$rea_sanitizers -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=$rea_sanitizers"
+      - name: Build and test required sanitizer scope
+        shell: bash
+        run: |
+          if [ '${{ matrix.mode }}' = thread ]; then
+            cmake --build build --target rea_analysis_tests rea_worker_tests rea_tests rea_program_tests --parallel 2
+            ctest --test-dir build -R '^(generate_fixture|analysis_control|analysis_worker_controller|program_analysis)$' --output-on-failure --output-junit sanitizer-tests.xml
+          else
+            cmake --build build --parallel 2
+            ctest --test-dir build --output-on-failure --output-junit sanitizer-tests.xml
+          fi
+      - name: Retain sanitizer reports (TSan widgets remain explicitly unresolved)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: sanitizer-${{ matrix.mode }}
+          retention-days: 30
+          path: |
+            build/Testing/Temporary/LastTest.log
+            build/sanitizer-tests.xml
+          if-no-files-found: warn
