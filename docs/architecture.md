@@ -109,3 +109,29 @@ Sinais de AnalysisController são emitidos por poll/start/cancel na thread propr
 AssemblyDelegate desenha operandos com QTextLayout e formatos por token, sem HTML e sem modificar instruções. FunctionEntryRole/FunctionNameRole identificam separadores nas linhas existentes; IncomingReferencesRole/OutgoingReferencesRole expõem contagens do resultado de disassembly. Nenhuma linha sintética altera índices, endereços ou histórico. O modelo mantém cinco colunas e os roles anteriores.
 
 applyWorkspaceTheme centraliza a paleta Dark/Light e estilos dos controles Qt. O painel Progress e sua ação de widget na toolbar aparecem enquanto o controlador está ocupado e são ocultados no busyChanged(false); o conteúdo final é preservado e o dock pode ser reaberto por View. A classificação de símbolos é apresentação dos metadados ELF, sem resolver imports/GOT ou endereços de runtime. Veja [refinamento visual e evidências](visual-refinement.md).
+
+## Memória de processos em execução
+
+ProcessMemory é um backend de leitura distinto de BinaryFile/ELF. ProcessDescriptor contém PID, identidade de criação e metadados; MemoryRegion usa VAs de runtime e fim exclusivo; MemoryPage contém somente bytes efetivamente lidos e erro/partial explícito. Não há tradução de runtime para ELF implícita nem análise estática automática dos bytes vivos.
+
+ProcessView agrega ProcessModel/MemoryRegionModel e um worker std::jthread ativo com no máximo um pedido pendente. Cada pedido tem ID; substituição solicita stop e só o mais recente é publicado. ProcessJobState é publicado por release/acquire e consumido após join. Workers usam dados/handles privados, nunca widgets. Tabelas, texto, status e cópia são manipulados na GUI. Atualização automática lê uma página por segundo apenas enquanto a aba está visível e o worker ocioso; fechar cancela e faz join. Veja process-memory.md para interfaces, identidade, OS, limites e testes.
+
+## Escrita e IR experimental
+
+ProcessMemory conserva o modo de acesso por sessão; write(expected,replacement) exige região r/w, comparação prévia e retorno MemoryWriteResult com contagem real e read-back. A GUI serializa a escrita e não descarta seu efeito em cancelamento/supersessão/fechamento. Undo é apenas a inversão condicional do último patch verificado. Ver process-memory.md.
+
+X86IRLifter gera IRInstruction/IRFunction no worker, a partir dos bytes dos membros de função. ProgramAnalysis contém o mapa IR por entry. Modelagem de operandos é tipada, lowering GPR é parcial e unknown fica opaco. As abas de texto possuem limite explícito de 2048 instruções por função, sem truncar silenciosamente cabeçalhos. Não há SSA, AST, tipos ou semântica executável completa. Ver decompilation-ir.md e reverse-engineering-roadmap.md.
+
+## Navegação por funções e análise sob demanda
+
+FunctionSearchModel combina FunctionModel e SymbolModel por VA, preservando aliases no índice de pesquisa. GoToFunctionDialog usa QSortFilterProxyModel na GUI; demangling ocorre no parser no worker. SymbolModel também fornece os dados à tabela de símbolos existente.
+
+InstructionModel publica um shared_ptr<const AnalysisResult>. AnalysisController passa essa referência imutável ao backend incremental, que valida bytes/mapeamentos existentes e decodifica somente novos endereços. Funções, CFG, referências e IR são reconstruídos sobre a união. A GUI aceita o resultado apenas quando o alvo e seus modelos derivados estão disponíveis; cancelamento/falha conserva a publicação anterior. Cota de instruções é compartilhada durante a sessão, sem cobrar novamente instruções reutilizadas. Não há banco persistente nem snapshot atômico do arquivo. Ver [contrato, testes e limitações](function-navigation.md).
+
+## Semantic IR v0.3.1
+
+SemanticResult adiciona SSA local de bitvectors e def-use sobre IRFunction, com estado abstrato de aliases GPR e células little endian de pilha. A recuperação C-like aceita apenas projeções de retorno inteiro sem fluxo desconhecido, mantendo MachineState e motivo de recusa. Ver [semântica e fronteiras](semantic-ir.md) e [validação real](decompiler-v0.3.1.md).
+
+## Análise de fluxo em desenvolvimento
+
+ControlFlowFacts consome CFG validado no worker e registra dominadores, pós-dominadores de grafos fechados acíclicos e corpos de laços naturais. Os fatos enriquecem a IR detalhada; ainda não autorizam transformação automática do C-like. Ver decompiler-v0.3.2.md.

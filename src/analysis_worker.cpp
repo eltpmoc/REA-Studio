@@ -26,9 +26,9 @@ void AnalysisController::discardPending() {
     auto outcome=std::make_shared<AnalysisOutcome>();outcome->reason=StopReason::Cancelled;
     QTimer::singleShot(0,this,[this,id,outcome]{emit completed(id,outcome);});
 }
-quint64 AnalysisController::start(const QString& path,AnalysisLimits limits,std::optional<uint64_t> requested,std::shared_ptr<InstructionBudget> quota) {
+quint64 AnalysisController::start(const QString& path,AnalysisLimits limits,std::optional<uint64_t> requested,std::shared_ptr<InstructionBudget> quota,std::shared_ptr<const AnalysisResult> baseline) {
     Q_ASSERT(QThread::currentThread()==thread());
-    Request request{++latest_,path,limits,requested,std::move(quota)};
+    Request request{++latest_,path,limits,requested,std::move(quota),std::move(baseline)};
     if(worker_) {
         control_->cancel();worker_->request_stop();discardPending();pending_=std::move(request);
     } else launch(std::move(request));
@@ -58,7 +58,9 @@ void AnalysisController::launch(Request request) {
             outcome->file=std::make_unique<BinaryFile>(std::filesystem::path(request.path.toUtf8().constData()));
 #endif
             outcome->image=ElfLoader{}.load(*outcome->file,*control);outcome->hasImage=true;
-            auto result=InProcessAnalysisBackend{}.analyze(*outcome->file,outcome->image,*control,token,request.requested);
+            auto result=request.baseline && request.requested
+                ? InProcessAnalysisBackend{}.analyzeIncremental(*outcome->file,outcome->image,*control,token,*request.requested,*request.baseline)
+                : InProcessAnalysisBackend{}.analyze(*outcome->file,outcome->image,*control,token,request.requested);
             outcome->analysis=std::move(result.assembly);outcome->program=std::move(result.program);
             outcome->reason=outcome->analysis.stopReason;
             // A late cancel wins even after the final decoded instruction.

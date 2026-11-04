@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "rea/binary.hpp"
+#include "rea/symbol_names.hpp"
 #include "rea/analysis_control.hpp"
 #include <algorithm>
 #include <stdexcept>
@@ -54,7 +55,7 @@ Image ElfLoader::load(BinaryFile& f, AnalysisControl& control) const {
     auto ident=f.read(0,16);
     require(accepts(ident), "Unsupported format: expected ELF (PE is not implemented)");
     require((ident[4]==1 || ident[4]==2) && (ident[5]==1 || ident[5]==2) && ident[6]==1, "Invalid ELF identification");
-    Image im;
+    Image im;bool demangleScratchReserved=false;
     im.bits=ident[4]==1 ? 32U : 64U; im.littleEndian=ident[5]==1;
     bool wide=im.bits==64;
     Fields h{f.read(0,wide ? 64 : 52),im.littleEndian};
@@ -136,7 +137,11 @@ Image ElfLoader::load(BinaryFile& f, AnalysisControl& control) const {
             sym.section=static_cast<uint32_t>(s.get(wide ? 6 : 14,2)); sym.dynamic=sec.type==11;
             require(sym.section!=0xffff,"Extended symbol section indexes are not implemented");
             require(sym.section>=0xff00 || sym.section<im.sections.size(),"Invalid symbol section index");
-            im.symbols.push_back(sym);
+            if(sym.name.starts_with("_Z") || sym.name.starts_with("?")) {
+                if(!demangleScratchReserved){control.reserveMemory(65536);demangleScratchReserved=true;}
+                control.work();auto demangled=demangleSymbol(sym.name);control.reserveMemory(128+2*demangled.size());sym.demangledName=std::move(demangled);control.checkpoint();
+            }
+            im.symbols.push_back(std::move(sym));
         }
     }
     control.checkpoint(); control.report(35,"ELF parsed",true);

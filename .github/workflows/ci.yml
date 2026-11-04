@@ -62,6 +62,8 @@ jobs:
             build-release/*tests.xml
             build-release/*workspace*.png
             build-release/workspace-*.png
+            build-release/go-to-*.png
+            build-release/function-*.png
             build-release/REA_BUILD_METADATA.txt
             build-fuzz/fuzz-run.log
             build-fuzz/artifacts/
@@ -94,7 +96,7 @@ jobs:
         run: cmake --preset windows-x64
       - name: Build MSVC Release
         run: cmake --build --preset windows-x64 --parallel 2
-      - name: CTest Windows (12 applicable tests; 5 require Linux /usr/bin/true)
+      - name: CTest Windows (18 applicable tests; 5 require Linux /usr/bin/true)
         run: ctest --preset windows-x64 --output-junit windows-release-tests.xml
       - name: Download and verify corresponding QtBase source
         run: python scripts/fetch-qt-source.py build-windows/qt-source
@@ -116,6 +118,8 @@ jobs:
             build-windows/*tests.xml
             build-windows/workspace-*.png
             build-windows/*workspace*.png
+            build-windows/go-to-*.png
+            build-windows/function-*.png
             build-windows/REA_BUILD_METADATA.txt
             build-windows/windows-dependencies.txt
           if-no-files-found: warn
@@ -159,8 +163,8 @@ jobs:
         shell: bash
         run: |
           if [ '${{ matrix.mode }}' = thread ]; then
-            cmake --build build --target rea_analysis_tests rea_worker_tests rea_tests rea_program_tests --parallel 2
-            ctest --test-dir build -R '^(generate_fixture|analysis_control|analysis_worker_controller|program_analysis)$' --output-on-failure --output-junit sanitizer-tests.xml
+            cmake --build build --target rea_analysis_tests rea_worker_tests rea_tests rea_program_tests rea_process_tests rea_ir_tests rea_navigation_analysis_tests rea_semantic_tests --parallel 2
+            ctest --test-dir build -R '^(generate_fixture|analysis_control|analysis_worker_controller|program_analysis|process_memory|intermediate_representation|incremental_function_analysis|semantic_ir)$' --output-on-failure --output-junit sanitizer-tests.xml
           else
             cmake --build build --parallel 2
             ctest --test-dir build --output-on-failure --output-junit sanitizer-tests.xml

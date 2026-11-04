@@ -30,6 +30,7 @@ public:
 };
 class InProcessAnalysisBackend final : public IAnalysisBackend {
 public:
+    BackendResult analyzeIncremental(BinaryFile&,const Image&,AnalysisControl&,std::stop_token,uint64_t,const AnalysisResult&) const;
     BackendResult analyze(BinaryFile&,const Image&,AnalysisControl&,std::stop_token,std::optional<uint64_t>) const override;
 };
 // Future platform implementations must report actual OS enforcement or an error.

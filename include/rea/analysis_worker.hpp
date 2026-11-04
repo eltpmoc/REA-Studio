@@ -26,7 +26,7 @@ public:
     explicit AnalysisController(QObject* parent=nullptr);
     ~AnalysisController() override;
     quint64 start(const QString& path,AnalysisLimits limits={},std::optional<uint64_t> requested={},
-                  std::shared_ptr<InstructionBudget> quota={});
+                  std::shared_ptr<InstructionBudget> quota={},std::shared_ptr<const AnalysisResult> baseline={});
     void cancel();
     bool busy() const {return worker_!=nullptr || pending_.has_value();}
     quint64 latestId() const {return latest_;}
@@ -35,7 +35,7 @@ signals:
     void completed(quint64 id,rea::AnalysisOutcomePtr outcome);
     void busyChanged(bool busy);
 private:
-    struct Request {quint64 id;QString path;AnalysisLimits limits;std::optional<uint64_t> requested;std::shared_ptr<InstructionBudget> quota;};
+    struct Request {quint64 id;QString path;AnalysisLimits limits;std::optional<uint64_t> requested;std::shared_ptr<InstructionBudget> quota;std::shared_ptr<const AnalysisResult> baseline;};
     void launch(Request request);
     void discardPending();
     void poll();

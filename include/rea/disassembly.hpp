@@ -58,6 +58,7 @@ struct AnalysisResult {
     std::vector<std::string> diagnostics;
     bool limited{};
     StopReason stopReason{StopReason::None};
+    std::vector<uint64_t> requestedEntries;
 };
 class DisassemblyEngine {
 public:
@@ -66,7 +67,7 @@ public:
     AnalysisResult analyze(BinaryFile&, const Image&, std::optional<uint64_t> requested = std::nullopt,
                            size_t maxInstructions = 20000) const;
     AnalysisResult analyze(BinaryFile&, const Image&, AnalysisControl&,
-                           std::optional<uint64_t> requested = std::nullopt) const;
+                           std::optional<uint64_t> requested = std::nullopt,const AnalysisResult* baseline = nullptr) const;
 private:
     const IInstructionDecoder& decoder_;
 };

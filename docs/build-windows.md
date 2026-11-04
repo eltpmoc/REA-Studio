@@ -15,7 +15,7 @@ ctest --preset windows-x64 --output-junit windows-release-tests.xml
 
 O preset fixa Visual Studio 17 2022 e arquitetura x64. UTF-8 se aplica a fontes e testes; NOMINMAX/WIN32_LEAN_AND_MEAN evitam macros da API Windows; CRT /MD ou /MDd acompanha o Qt DLL oficial. Zydis/Zycore são C estático local, configurado pelo mesmo toolchain, sem extensão GCC no código próprio. A única fixture FIFO está guardada por !\_WIN32. A abertura de arquivo do worker usa filesystem::path com QString::toStdWString no Windows. Não há backend PE, mesmo quando o aplicativo roda em Windows.
 
-São 12 testes aplicáveis no Windows. Cinco dos 17 testes Linux usam /usr/bin/true e já eram condicionais no CMake; não foram desabilitados para conseguir aprovação. GUI usa offscreen nos testes. O teste de arquivo de 5 GiB pode precisar de espaço físico se o filesystem não criar arquivo esparso; reserve espaço antes de executar.
+São 16 testes aplicáveis no Windows após memória/IR. Cinco dos 21 testes Linux usam /usr/bin/true e já eram condicionais no CMake; não foram desabilitados para conseguir aprovação. GUI usa offscreen nos testes. O teste de arquivo de 5 GiB pode precisar de espaço físico se o filesystem não criar arquivo esparso; reserve espaço antes de executar.
 
 Deployment após build e testes reais:
 

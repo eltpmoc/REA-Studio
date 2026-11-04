@@ -15,3 +15,7 @@ Workflow com contents:read, checkout sem persistência de credenciais, actions f
 ## Relato de vulnerabilidades
 
 Não inclua amostras proprietárias, malware executável, credenciais ou dados pessoais em issues públicas. Use private vulnerability reporting do GitHub se o mantenedor o tiver habilitado; a preparação não altera configurações remotas nem afirma que esse canal já esteja ativo. Combine um canal privado com o mantenedor antes de transmitir detalhes sensíveis. Relatos devem identificar versão/commit, SO/toolchain, entrada mínima segura e comportamento observado. Sem SLA ou programa de recompensa anunciado.
+
+## Leitura de memória em runtime
+
+A aba Process Memory pode ler dados sensíveis do alvo quando o SO permite. A sessão inicial é somente leitura. Escrita exige Enable writing e Apply; não injeta código, suspende processos, obtém SeDebugPrivilege ou altera ptrace/Yama. Compara bytes/region e verifica read-back, sem garantia atômica ou rollback de escrita parcial. Mappings compartilhados podem propagar efeitos a outros processos/arquivos. Acesso negado permanece erro. Identidades e handles/descritores ancorados evitam redirecionar a sessão silenciosamente para outro PID reutilizado. A sessão não é um snapshot: o alvo pode mudar/desmapear páginas ou terminar entre operações. Não compartilhe capturas/dumps de memória de aplicações reais sem revisar seu conteúdo. A captura automatizada deste recurso usa apenas uma página conhecida de fixture preenchida com bytes de teste.

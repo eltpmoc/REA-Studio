@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "rea/function_analysis.hpp"
+#include "rea/control_flow_analysis.hpp"
 #include <algorithm>
 #include <deque>
 #include <limits>
+#include <sstream>
 namespace rea {
+namespace {std::string subName(uint64_t address){std::ostringstream out;out<<"sub_"<<std::hex<<address;return out.str();}}
+const char* functionOriginName(FunctionOrigin o){switch(o){case FunctionOrigin::ElfSymbol:return "ELF symbol";case FunctionOrigin::EntryPoint:return "ELF entry point";case FunctionOrigin::DirectCall:return "Direct call (heuristic)";case FunctionOrigin::UserRequested:return "User executable address";default:return "Unknown";}}
 const char* functionConfidenceName(FunctionConfidence c) {
     switch(c) {case FunctionConfidence::Confirmed:return "confirmed";case FunctionConfidence::Probable:return "probable";default:return "unknown";}
 }
@@ -20,17 +24,18 @@ FunctionRegistry FunctionAnalyzer::analyze(const Image& image,uint64_t fileSize,
     std::map<uint64_t,const Instruction*> code;
     for(const auto& i:result.instructions) {control.work();control.reserveMemory(96);if(i.size && i.address<=UINT64_MAX-i.size && i.flow!=FlowType::Invalid) code.emplace(i.address,&i);}
     std::map<uint64_t,FunctionDescriptor> seeds;
-    auto seed=[&](uint64_t va,std::string name,FunctionConfidence confidence,std::string evidence,uint64_t size=0){
+    auto seed=[&](uint64_t va,std::string name,FunctionConfidence confidence,std::string evidence,uint64_t size=0,FunctionOrigin origin=FunctionOrigin::Unknown,std::string demangled={}){
         control.work();auto m=translator.mapping(va);if(!m || !m->executable) return;
-        control.reserveMemory(512+name.size()+evidence.size());
+        control.reserveMemory(512+2*(name.size()+evidence.size()+demangled.size()));
         auto [it,inserted]=seeds.try_emplace(va);auto& f=it->second;
         if(!inserted) {++f.duplicateEntries;if(static_cast<int>(confidence)>=static_cast<int>(f.confidence)) return;}
-        f.entry=va;f.name=std::move(name);f.evidence=std::move(evidence);f.confidence=confidence;
+        f.entry=va;f.name=std::move(name);f.evidence=std::move(evidence);f.confidence=confidence;f.origin=origin;f.demangledName=std::move(demangled);
         f.end=size && size<=UINT64_MAX-va ? va+size : va;f.declaredEnd=f.end;
     };
-    for(const auto& s:image.symbols) {control.work();if((s.info&15)==2 && s.section && s.section<image.sections.size()) seed(s.address,s.name,FunctionConfidence::Confirmed,"Defined ELF STT_FUNC",s.size);}
-    seed(image.entry,"entry",FunctionConfidence::Confirmed,"ELF entry point");
-    for(const auto& i:result.instructions) {control.work();if(i.flow==FlowType::Call && i.directTarget) seed(*i.directTarget,"sub_"+std::to_string(*i.directTarget),code.contains(*i.directTarget) ? FunctionConfidence::Probable : FunctionConfidence::Unknown,"Direct call target");}
+    for(const auto& s:image.symbols) {control.work();if((s.info&15)==2 && s.section && s.section<image.sections.size()) seed(s.address,s.name,FunctionConfidence::Confirmed,"Defined ELF STT_FUNC",s.size,FunctionOrigin::ElfSymbol,s.demangledName);}
+    seed(image.entry,"entry",FunctionConfidence::Confirmed,"ELF entry point",0,FunctionOrigin::EntryPoint);
+    for(const auto& i:result.instructions) {control.work();if(i.flow==FlowType::Call && i.directTarget) seed(*i.directTarget,subName(*i.directTarget),code.contains(*i.directTarget) ? FunctionConfidence::Probable : FunctionConfidence::Unknown,"Direct call target",0,FunctionOrigin::DirectCall);}
+    for(auto va:result.requestedEntries) {control.work();if(code.contains(va)) seed(va,subName(va),FunctionConfidence::Probable,"User requested executable address",0,FunctionOrigin::UserRequested);}
     FunctionRegistry registry;
     std::map<uint64_t,size_t> owners;
     for(auto& [entry,f]:seeds) {
@@ -150,6 +155,19 @@ ProgramAnalysis analyzeProgram(const Image& image,uint64_t size,const AnalysisRe
     p.registry=FunctionAnalyzer{}.analyze(image,size,assembly,control);p.references.build(assembly,control);
     GraphBudget budget;budget.maxNodes=control.limits().maxCFGNodes;budget.maxEdges=control.limits().maxCFGEdges;
     for(const auto& f:p.registry.functions) {control.work();p.graphs.emplace(f.entry,CFGBuilder{}.build(f,assembly,budget,control));}
-    control.checkpoint();return p;
+    try {for(const auto& [entry,graph]:p.graphs) {
+        control.work();std::vector<Instruction> code;
+        for(const auto& block:graph.blocks)for(const auto& i:block.instructions){control.work();control.reserveMemory(1024+i.evidence.size()+i.operands.size());code.push_back(i);}
+        auto ir=X86IRLifter{}.function(entry,code,control);
+        auto facts=analyzeControlFlow(graph,control);
+        ir.listing+="\nCFG facts (conservative; not source-level structures):\n";
+        for(const auto& [node,doms]:facts.dominators){control.work();ir.listing+="block "+std::to_string(node)+" dominators:";for(auto d:doms)ir.listing+=" "+std::to_string(d);ir.listing+="\n";}
+        for(const auto& loop:facts.loops){control.work();ir.listing+="natural loop header "+std::to_string(loop.header)+", blocks="+std::to_string(loop.body.size())+"\n";}
+        if(facts.postDominators.empty())ir.listing+="Postdominators unavailable (cycle or unknown exit).\n";
+        p.ir.emplace(entry,std::move(ir));
+    }
+    control.checkpoint();}
+    catch(const AnalysisStopped& stopped){if(stopped.reason()==StopReason::Cancelled) throw;p.irStopReason=stopped.reason();}
+    return p;
 }
 }

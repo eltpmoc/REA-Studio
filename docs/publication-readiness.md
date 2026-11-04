@@ -81,3 +81,7 @@ CMakePresets.json foi parseado por cmake --list-presets; YAML do workflow foi pa
 4. Aprovação explícita separada da tag/prerelease/assets finais. O workflow não contém publicação de release.
 
 Consultar docs/release-process.md para a sequência e comandos apenas após aprovação. Pendências técnicas adicionais estão em known-limitations.md e security.md.
+
+## Alteração posterior — 2026-11-04
+
+O recurso Process Memory adicionou dois testes (19 Linux / 14 Windows aplicáveis). Sua validação está em process-memory.md. Os arquivos de dist e a árvore build/publication-review descritos neste relatório registram o candidato anterior e não incorporam automaticamente essa alteração. Antes de qualquer publicação, regenerar fontes/binários/hashes e a revisão a partir do código atual, repetir os gates e obter aprovação. Nenhum push/release foi autorizado ou executado por essa alteração.
