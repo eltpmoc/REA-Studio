@@ -1,0 +1,7 @@
+{
+  "version": "6.8.3",
+  "filename": "qtbase-everywhere-src-6.8.3.tar.xz",
+  "url": "https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qtbase-everywhere-src-6.8.3.tar.xz",
+  "sha256": "56001b905601bb9023d399f3ba780d7fa940f3e4861e496a7c490331f49e0b80",
+  "verification": "https://download.qt.io/archive/qt/6.8/6.8.3/submodules/qtbase-everywhere-src-6.8.3.tar.xz.mirrorlist"
+}
