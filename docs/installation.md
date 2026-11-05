@@ -21,18 +21,18 @@ QT_QPA_PLATFORM=offscreen REA-Studio-v0.3.0-alpha-Linux-x86_64/bin/rea-studio --
 
 Use ldd apenas no binário do próprio projeto de origem confiável; nunca em um ELF não confiável que pretende analisar. O smoke é um teste automatizado de Qt offscreen, não valida interação em desktop.
 
-## Windows x64 (quando houver artefato aprovado)
+## Windows x64
 
-Não existe ZIP Windows validado nesta preparação local. Só usar o ZIP produzido após aprovação dos passos Windows/CTest/deployment no CI.
+O build local v0.3.2-alpha foi compilado com MSVC x64 e Qt 6.8.3 e passou os 21 testes aplicáveis. Use o ZIP produzido por `scripts/package-windows.ps1`, que exige também os smoke tests de deployment. Os comandos abaixo são executados no diretório que contém o ZIP (nesta máquina, `dist/windows-x64`); veja [build Windows e evidências](build-windows.md).
 
 ```powershell
-Get-FileHash REA-Studio-v0.3.0-alpha-Windows-x64.zip -Algorithm SHA256
-Expand-Archive REA-Studio-v0.3.0-alpha-Windows-x64.zip -DestinationPath .
-./REA-Studio-v0.3.0-alpha-Windows-x64/bin/rea-studio.exe
+Get-FileHash REA-Studio-v0.3.2-alpha-Windows-x64.zip -Algorithm SHA256
+Expand-Archive REA-Studio-v0.3.2-alpha-Windows-x64.zip -DestinationPath .
+./REA-Studio-v0.3.2-alpha-Windows-x64/bin/rea-studio.exe
 ```
 
 Compare o hash com SHA256SUMS.txt. Instale o Visual C++ Redistributable oficial x64 compatível com o compilador. Preserve bin/platforms e qt.conf; não misture DLLs de outra instalação Qt. O programa Windows continua aceitando ELF, sem suporte PE. Plugins/fontes/licenças acompanham a árvore. Nenhum certificado de assinatura é alegado.
 
 ## Fontes
 
-REA-Studio-v0.3.0-alpha-Source.tar.gz contém todo o código próprio e vendorizado necessário ao build, testes e scripts. Extraia e siga build-linux.md ou build-windows.md. Qt e toolchain são requisitos externos. Cada pacote binário inclui o mesmo source archive em share/rea-studio/sources. No Windows a fonte QtBase também acompanha o pacote.
+O arquivo Source.tar.gz correspondente à versão do pacote contém todo o código próprio e vendorizado necessário ao build, testes e scripts. Extraia e siga build-linux.md ou build-windows.md. Qt e toolchain são requisitos externos. Cada pacote binário inclui o mesmo source archive em share/rea-studio/sources. No Windows a fonte QtBase também acompanha o pacote.

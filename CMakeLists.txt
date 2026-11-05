@@ -158,6 +158,12 @@ if(BUILD_TESTING)
     set_tests_properties(true_gui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
   endif()
   set_tests_properties(core disassembly workspace_gui gui_smoke generate_fixture PROPERTIES TIMEOUT 60)
+  if(WIN32)
+    # The offscreen backend does not discover the native Windows font directory.
+    file(TO_CMAKE_PATH "$ENV{SystemRoot}/Fonts" REA_WINDOWS_FONT_DIR)
+    get_property(REA_TEST_NAMES DIRECTORY PROPERTY TESTS)
+    set_property(TEST ${REA_TEST_NAMES} APPEND PROPERTY ENVIRONMENT "QT_QPA_FONTDIR=${REA_WINDOWS_FONT_DIR}")
+  endif()
 endif()
 install(TARGETS rea-studio RUNTIME DESTINATION bin)
 

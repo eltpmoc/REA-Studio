@@ -32,10 +32,10 @@ O alvo é inspecionado, não carregado como biblioteca nem executado. Confirmed 
 | Plataforma | Estado desta preparação |
 |---|---|
 | Linux x86_64 | GCC Debug/Release, Clang e ASan/UBSan: 24/24 com o ELF obrigatório; TSan core: 7/7; [evidências](docs/function-navigation.md) |
-| Windows x64 / MSVC | Preset, CI, CTest e deployment preparados; **sem execução Windows local, sem ZIP Windows validado** |
+| Windows x64 / MSVC | Build Release local com MSVC 19.44 / Qt 6.8.3, **21/21 testes aprovados**, teste visual nativo e ZIP com smoke de deployment aprovado; [instruções e evidências](docs/build-windows.md) |
 | Outros sistemas/arquiteturas | Sem validação ou pacote nesta alpha |
 
-Qt gráfico é testado em **offscreen**. Isso não equivale a validação desktop nativa. O workflow Windows precisa executar de fato após o push autorizado para comprovar compatibilidade. O aplicativo Windows continua sendo um analisador ELF, sem PE.
+Os testes gráficos da suíte usam **offscreen**. No Windows, o teste visual também foi executado com o backend nativo `windows`; isso não equivale a uma revisão manual completa da interface. O aplicativo Windows continua sendo um analisador ELF, sem PE. O ZIP é criado apenas após os testes adicionais de deployment; nenhum resultado de CI remoto é alegado.
 
 ## Requisitos e compilação Linux
 
@@ -65,11 +65,11 @@ cmake --build --preset windows-x64 --parallel
 ctest --preset windows-x64 --output-junit windows-release-tests.xml
 ```
 
-Deployment com windeployqt, fontes/licenças Qt e smoke sem Qt no PATH de desenvolvimento: [build Windows](docs/build-windows.md). Não declarar Windows validado antes de seus relatórios reais. O CI preserva falhas obrigatórias e não publica releases.
+Para Visual Studio 2026 com o toolset MSVC 2022 instalado, use `windows-x64-ninja` em Developer PowerShell x64. Comandos, resultados locais e deployment com windeployqt, fontes/licenças Qt e smoke sem Qt no PATH de desenvolvimento: [build Windows](docs/build-windows.md). O CI preserva falhas obrigatórias e não publica releases.
 
 ## Testes e CI
 
-Os **17 testes anteriores** foram mantidos; `process_memory` e `process_memory_gui` somaram dois testes à suíte anterior. `intermediate_representation` e `ir_workspace` levam a suíte anterior a **21 testes**. Os dois novos testes de navegação levam a suíte a 23; com `REA_NAVIGATION_TEST_ELF`, são **24 testes**. Cobertura anterior: parser/malformados/endian/arquivo de 5 GiB, Assembly e tradução, funções/CFG/loops/xrefs, limites/cancelamento/concorrência, worker/lifetime, navegação/modelos/temas/progresso, exportações e fuzz smoke. No Windows são 18 aplicáveis; cinco testes dependem de /usr/bin/true no Linux.
+Os testes anteriores foram mantidos. Nesta árvore são **21 testes aplicáveis ao Windows**; os testes adicionais com `/usr/bin/true`, a fixture nativa ELF e `REA_NAVIGATION_TEST_ELF` dependem da plataforma/configuração. Cobertura: parser/malformados/endian/arquivo de 5 GiB, Assembly e tradução, funções/CFG/loops/xrefs, fatos e regiões de controle de fluxo, IR semântica, limites/cancelamento/concorrência, worker/lifetime, navegação/modelos/temas/progresso, memória de processos, exportações e fuzz smoke. Use `ctest --preset windows-x64-ninja -N` para listar a suíte local.
 
 [GitHub Actions](.github/workflows/ci.yml): Linux GCC/Clang, Windows MSVC x64, ASan/UBSan, TSan do núcleo/controlador, integridade dos 107 arquivos e licenças, fuzzing curto, pacotes e relatórios retidos por 30 dias. Actions fixadas por SHA, permissões de leitura, sem publicação remota de release e sem continue-on-error.
 

@@ -96,7 +96,7 @@ jobs:
         run: cmake --preset windows-x64
       - name: Build MSVC Release
         run: cmake --build --preset windows-x64 --parallel 2
-      - name: CTest Windows (18 applicable tests; 5 require Linux /usr/bin/true)
+      - name: CTest Windows (all applicable tests)
         run: ctest --preset windows-x64 --output-junit windows-release-tests.xml
       - name: Download and verify corresponding QtBase source
         run: python scripts/fetch-qt-source.py build-windows/qt-source

@@ -1,4 +1,4 @@
-# REA Studio v0.3.0-alpha — release notes (local candidate)
+# REA Studio v0.3.2-alpha — release notes (local candidate)
 
 First proposed public alpha. No remote release has been published by this preparation.
 
@@ -12,16 +12,16 @@ First proposed public alpha. No remote release has been published by this prepar
 
 ## Artifacts and status
 
-- REA-Studio-v0.3.0-alpha-Linux-x86_64.tar.gz: system-Qt distribution; requires compatible Linux x86_64 Qt, glibc and libstdc++ versions, identified by the installed build metadata/dependency report. This is not a universal portable/AppImage build.
-- REA-Studio-v0.3.0-alpha-Source.tar.gz: complete source candidate with tests, build/package scripts, documentation and vendored MIT dependencies.
-- REA-Studio-v0.3.0-alpha-Windows-x64.zip: **not available from this local preparation**. Include only after actual Windows MSVC build, CTest and deployed-package smoke tests pass. The CI is prepared to generate it with QtBase source/notices included.
+- REA-Studio-v0.3.2-alpha-Windows-x64.zip: Release build using MSVC 19.44 and Qt 6.8.3. Generated only after all 21 Windows tests and deployed-package smoke tests pass. Includes QtBase sources/notices and the matching REA source archive.
+- REA-Studio-v0.3.2-alpha-Source.tar.gz: complete source candidate with tests, build/package scripts, documentation and vendored MIT dependencies.
+- The older v0.3.0-alpha Linux artifact is preserved separately; no new Linux binary is produced by this Windows build.
 - SHA256SUMS.txt: hashes only artifacts actually produced.
 
-The existing 17 Linux tests are retained. Windows has 12 platform-applicable tests; five tests require Linux /usr/bin/true. Windows and native desktop validation are pending until corresponding real reports exist. Functional Qt tests here run offscreen. See docs/publication-readiness.md for local results.
+Local Windows validation on 2026-11-05: 21/21 applicable CTest tests passed. The visual test also passed using the native Windows backend, with an inspected screenshot. The 5 GiB test fixture now explicitly enables Windows sparse-file support; large-file checks and test timeouts remain enabled. Offscreen tests receive the Windows font directory. See docs/build-windows.md for the toolchain, commands, reports and limits. No remote CI result is claimed.
 
 ## Known limitations
 
-No PE, ARM64 disassembly, decompilation, indirect target resolution, jump-table recovery or real out-of-process isolation. Analysis is conservative and can be incomplete. Resource memory accounting is not a process RSS cap. Blocking I/O and synchronous model publication can delay cancellation/responsiveness. TSan widget reports in the prebuilt Qt pool remain unresolved; passing core/controller tests does not approve the entire GUI. LeakSanitizer is not approved in the current ptrace environment.
+No PE, ARM64 disassembly, complete decompilation, indirect target resolution, jump-table recovery or real out-of-process isolation. IR and pseudocode remain experimental. The Windows application is x64, not Win32; it requires a compatible official Visual C++ Redistributable x64. Analysis is conservative and can be incomplete. Resource memory accounting is not a process RSS cap. Blocking I/O and synchronous model publication can delay cancellation/responsiveness. Historical Linux TSan widget reports remain unresolved. Native Windows smoke/visual checks do not constitute full manual UI validation or testing on a clean machine.
 
 ## Licensing and publication gate
 
