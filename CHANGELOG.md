@@ -1,5 +1,40 @@
 # Changelog
 
+## Em desenvolvimento — v0.3.2-alpha
+
+- Análise de dominadores, pós-dominadores acíclicos e laços naturais no núcleo, integrada à IR detalhada, com testes de limites e cancelamento. Recuperação estruturada e publicação ainda pendentes.
+- Validação desta etapa: GCC/Clang/ASan+UBSan 26/26 e TSan núcleo 9/9. Ver docs/validation-v0.3.2.md.
+
+
+## 0.3.1-alpha — Semantic IR local
+
+- Definições imutáveis de bitvectors, cadeias def-use, aliases GPR e memória local little endian. Recuperação conservadora de retorno inteiro System V e primeira expressão de somar comprovada no ELF real.
+- C-like com confiança e limites explícitos; MachineState preservado. SSA entre blocos, memória geral e tipos assinados continuam pendentes. Veja docs/decompiler-v0.3.1.md.
+
+
+## 0.3.0-alpha — navegação por funções, 2026-11-04
+
+- Navigate → Go to Function, Ctrl+Shift+F, filtro incremental e catálogo integrado FunctionModel/SymbolModel, com nome original/demangled, VA, tamanho, origem e confiança.
+- Análise sob demanda reutiliza instruções validadas, compartilha cota global, permite cancelamento e preserva a publicação anterior em falhas. Seleção sincroniza Assembly, CFG, referências, IR e pseudocódigo.
+- Navegação real Qt offscreen comprovada nas quatro funções do ELF obrigatório; GCC Debug/Release, Clang e ASan/UBSan 24/24; TSan core 7/7. Windows/desktop nativo continuam pendentes. Veja docs/function-navigation.md.
+
+## 0.3.0-alpha — escrita de memória e primeira IR, 2026-11-04
+
+- Modo explícito Read/Write, edição hexadecimal por diálogo, comparação dos bytes originais, read-back, erros parciais e desfazer do último patch verificado. Sem alteração de proteção de páginas ou elevação de privilégios; escrita não atômica.
+- Primeiro X86IRLifter, operandos tipados/metadados/flags/proveniência e lowering limitado de GPR 32/64. Novas abas IR/Pseudocode experimentais, com opacos e dispatcher de PC explícitos. Não equivale a um decompilador completo.
+- Prioridade confirmada de evolução: decompilação/IR; matriz inicial de capacidades e gates, sem alegação de paridade integral com Ghidra/IDA.
+- 21/21 GCC Debug/Release, Clang e ASan/UBSan; 6/6 TSan core. Windows e TSan widgets continuam pendentes. Corrigido join duplicado de fechamento reproduzido pelo novo teste GUI de escrita.
+
+
+## 0.3.0-alpha — memória de processos, 2026-11-04
+
+- Nova aba Process Memory e File → Open process memory, com lista/filtro de processos, abertura por duplo clique, regiões/permissões e hex/ASCII em endereços de runtime.
+- Backend Linux /proc (memória somente leitura com descritores ancorados) e backend Windows Toolhelp/OpenProcess/VirtualQueryEx/ReadProcessMemory, sem elevação automática ou modificação do alvo.
+- Leitura paginada de até 4 KiB, atualização manual/automática de 1 s, cópia do hex, erros/leituras parciais, cancelamento e worker std::jthread com publicação na GUI após join.
+- Testes de memória real própria/processo-filho, mudanças em runtime, identidade, término, limites, concorrência, navegação GUI e lifetime. Preservados os 17 anteriores; 19/19 GCC/Clang/ASan+UBSan e 5/5 TSan core.
+- Implementação Windows preparada, sem execução local Windows. Memória virtual viva, não dump físico ou snapshot atômico.
+
+
 ## 0.3.0-alpha — preparação pública local, 2026-11-03
 
 - Presets Linux Release e Windows MSVC x64, identificação alpha e metadata do build instalada. MSVC com UTF-8 em todos os alvos, NOMINMAX e CRT DLL compatível com Qt.

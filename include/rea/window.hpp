@@ -18,6 +18,7 @@ class QCloseEvent;
 class QDockWidget;
 class QAction;
 namespace rea {
+class ProcessView;
 class Window final : public QMainWindow {
 public:
     explicit Window(bool persistentSettings=true);
@@ -30,6 +31,11 @@ public:
     AnalysisLimits analysisLimits() const {return limits_;}
     bool smokeValid() const;
     bool navigateToAddress(uint64_t va);
+    bool navigateToFunction(uint64_t va);
+    void goToFunction();
+    const FunctionModel* functionModel() const {return functionModel_;}
+    const SymbolModel* symbolModel() const {return symbolModel_;}
+    const ProgramAnalysis& programAnalysis() const {return program_;}
     bool navigateToOffset(uint64_t offset);
     bool goBack();
     bool goForward();
@@ -53,11 +59,14 @@ private:
     void finishJob(quint64 id,AnalysisOutcomePtr outcome);
     bool commitOutcome(const QString& path,AnalysisOutcomePtr outcome);
     void configureLimits();
+    QPlainTextEdit *irText_{},*pseudocode_{};
     QPlainTextEdit *hex_{}, *info_{}, *logs_{}, *console_{}, *addressInfo_{}, *instructionInfo_{};
     QTableWidget *sections_{}, *symbols_{};
     QTreeWidget *project_{};
     QTableView *functions_{}, *referencesView_{};
     FunctionModel* functionModel_{};
+    SymbolModel* symbolModel_{};
+    QAction* goToFunctionAction_{};
     ReferenceModel* referenceModel_{};
     GraphView* graph_{};
     ProgramAnalysis program_;
@@ -66,6 +75,7 @@ private:
     QTableView* assembly_{};
     InstructionModel* instructions_{};
     QTabWidget* centralTabs_{};
+    ProcessView* processView_{};
     QListWidget* history_{};
     QProgressBar *progress_{}, *toolbarProgress_{};
     QLabel* progressDetails_{};

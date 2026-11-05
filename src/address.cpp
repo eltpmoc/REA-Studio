@@ -49,8 +49,9 @@ std::optional<uint64_t> AddressTranslator::fromRuntime(uint64_t runtime) const {
 SymbolResolver::SymbolResolver(const Image& image) {
     for(const auto& s:image.symbols) {
         if(!s.name.empty() && s.section && s.section<image.sections.size()) {
-            auto [it,inserted]=names_.emplace(s.address,s.name);
-            if(!inserted && it->second!=s.name && it->second.size()+s.name.size()+3<=4096) it->second += " / "+s.name;
+            const auto& preferred=s.demangledName.empty()?s.name:s.demangledName;
+            auto [it,inserted]=names_.emplace(s.address,preferred);
+            if(!inserted && it->second!=preferred && it->second.size()+preferred.size()+3<=4096) it->second += " / "+preferred;
         }
     }
 }

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "rea/window.hpp"
+#include "rea/function_dialog.hpp"
+#include "rea/process_view.hpp"
 #include "rea/assembly_delegate.hpp"
 #include "rea/theme.hpp"
 #include <QAction>
@@ -63,12 +65,14 @@ Window::Window(bool persistentSettings) : persistent_(persistentSettings) {
     auto* open=fileMenu->addAction("&Open binary…",QKeySequence::Open,this,[this]{
         auto path=QFileDialog::getOpenFileName(this,"Open binary"); if(!path.isEmpty()) openFileAsync(path);
     });
+    auto* processesAction=fileMenu->addAction("Open process memory…");processesAction->setObjectName("openProcessMemoryAction");
     fileMenu->addAction("Quit",QKeySequence::Quit,this,&QWidget::close);
     auto* view=menuBar()->addMenu("&View");
     auto* themes=menuBar()->addMenu("&Theme");
     themes->addAction("Dark",this,[this]{setDarkTheme(true);});
     themes->addAction("Light",this,[this]{setDarkTheme(false);});
     auto* nav=menuBar()->addMenu("&Navigate");
+    goToFunctionAction_=nav->addAction("Go to Function…",QKeySequence("Ctrl+Shift+F"),this,[this]{goToFunction();});goToFunctionAction_->setObjectName("goToFunctionAction");goToFunctionAction_->setEnabled(false);
     auto* back=nav->addAction("Back",QKeySequence("Alt+Left"),this,[this]{goBack();}); back->setObjectName("backAction");
     auto* forward=nav->addAction("Forward",QKeySequence("Alt+Right"),this,[this]{goForward();}); forward->setObjectName("forwardAction");
     auto* entry=nav->addAction("Entry point",this,[this]{if(file_) navigateToAddress(image_.entry);});
@@ -113,11 +117,15 @@ Window::Window(bool persistentSettings) : persistent_(persistentSettings) {
     graph_=new GraphView;centralTabs_->addTab(graph_,"Graph View");
     referencesView_=new QTableView;referencesView_->setObjectName("referencesView");referenceModel_=new ReferenceModel(this);referencesView_->setModel(referenceModel_);
     referencesView_->horizontalHeader()->setStretchLastSection(true);centralTabs_->addTab(referencesView_,"Cross References");
+    irText_=textView("irView");pseudocode_=textView("pseudocodeView");irText_->setMaximumBlockCount(0);pseudocode_->setMaximumBlockCount(0);centralTabs_->addTab(irText_,"IR (experimental)");centralTabs_->addTab(pseudocode_,"Pseudocode (experimental)");
+    processView_=new ProcessView;centralTabs_->addTab(processView_,"Process Memory");
+    connect(processesAction,&QAction::triggered,this,[this]{centralTabs_->setCurrentWidget(processView_);});
     fileMenu->addAction("Export graph PNG…",this,[this]{auto p=QFileDialog::getSaveFileName(this,"Export graph PNG",{},"PNG (*.png)");if(!p.isEmpty() && !graph_->exportPng(p)) log("Graph PNG export failed or exceeds pixel limit.");});
     fileMenu->addAction("Export graph SVG…",this,[this]{auto p=QFileDialog::getSaveFileName(this,"Export graph SVG",{},"SVG (*.svg)");if(!p.isEmpty() && !graph_->exportSvg(p)) log("Graph SVG export failed.");});
     connect(graph_,&GraphView::instructionActivated,this,[this](qulonglong a){navigateToAddress(a);});
     connect(referencesView_,&QTableView::doubleClicked,this,[this](const QModelIndex& i){auto* r=referenceModel_->reference(i.row());if(r) navigateToAddress(i.column()==0?r->from:r->to);});
     auto* functionsDock=dock("Functions",functions_,Qt::LeftDockWidgetArea);
+    symbolModel_=new SymbolModel(this);
     symbols_=table("symbolsView",{"Name","Address","Size","Table","Section","Info","Visibility","Classification"});
     symbols_->horizontalHeader()->setSectionsMovable(true);symbols_->horizontalHeader()->moveSection(7,1);
     symbols_->setColumnWidth(0,150);symbols_->setColumnWidth(7,175);
@@ -194,7 +202,7 @@ void Window::setDarkTheme(bool dark) {
 }
 Window::~Window() {delete controller_;controller_=nullptr;}
 void Window::closeEvent(QCloseEvent* event) {
-    closing_=true;controller_->cancel();
+    closing_=true;controller_->cancel();processView_->stop();
     if(persistent_) {
         QSettings settings; settings.setValue("workspace/v2/geometry",saveGeometry());
         settings.setValue("workspace/v2/layout",saveState(2)); settings.setValue("workspace/v2/dark",dark_);
@@ -220,7 +228,7 @@ quint64 Window::startJob(const QString& path,std::optional<uint64_t> navigation,
     requestQuota_=navigation ? projectQuota_ : std::make_shared<InstructionBudget>(limits_.maxInstructions);
     progress_->setFormat("%p%");toolbarProgress_->setFormat("%p%");
     progress_->setValue(0);toolbarProgress_->setValue(0);progressDetails_->setText("Analysis queued…");
-    requestId_=controller_->start(path,limits_,navigation,requestQuota_);return requestId_;
+    requestId_=controller_->start(path,limits_,navigation,requestQuota_,navigation?instructions_->snapshot():std::shared_ptr<const AnalysisResult>{});return requestId_;
 }
 void Window::finishJob(quint64 id,AnalysisOutcomePtr outcome) {
     if(id!=requestId_ || closing_) return;
@@ -238,9 +246,14 @@ void Window::finishJob(quint64 id,AnalysisOutcomePtr outcome) {
         if(requestInteractive_) QMessageBox::critical(this,"Cannot analyze binary",description);
         return;
     }
-    if(requestedNavigation_ && outcome->analysis.instructions.empty() && outcome->reason!=StopReason::None) {
-        log(description+"; navigation analysis stopped, previous result preserved.");
-        statusBar()->showMessage(description);return;
+    if(requestedNavigation_) {
+        const auto target=*requestedNavigation_;auto row=std::lower_bound(outcome->analysis.instructions.begin(),outcome->analysis.instructions.end(),target,[](const Instruction& i,uint64_t va){return i.address<va;});
+        const auto* function=outcome->program.registry.containing(target);
+        if(outcome->program.irStopReason!=StopReason::None || row==outcome->analysis.instructions.end() || row->address!=target || row->flow==FlowType::Invalid || !function || !outcome->program.graphs.contains(function->entry) || outcome->analysis.instructions.size()<static_cast<size_t>(instructions_->rowCount())){
+            const QString why=outcome->reason!=StopReason::None?description:row==outcome->analysis.instructions.end() || row->address!=target?"No decoded instruction at requested address":row->flow==FlowType::Invalid?"Invalid encoding at requested address":"Derived function analysis unavailable";
+            log(why+"; previous analysis preserved.");for(const auto& diagnostic:outcome->analysis.diagnostics)log(utf(diagnostic));
+            statusBar()->showMessage("Go to Function stopped: "+why+" — previous analysis preserved");return;
+        }
     }
     applyingResult_=true;
     lastJobSuccess_=commitOutcome(requestPath_,outcome);
@@ -260,6 +273,7 @@ bool Window::commitOutcome(const QString& path,AnalysisOutcomePtr outcome) {
     try {
         file_=std::move(outcome->file);image_=std::move(outcome->image);
         program_=std::move(outcome->program);displayedFunction_.reset();
+        symbolModel_->setImage(image_);goToFunctionAction_->setEnabled(true);
         instructions_->setAnalysis(std::move(outcome->analysis),image_);
         if(!requestedNavigation_) {locations_.clear(); historyPosition_=-1; history_->clear();}
         assembly_->clearSelection();
@@ -272,18 +286,10 @@ bool Window::commitOutcome(const QString& path,AnalysisOutcomePtr outcome) {
             QString flags; if(s.flags&1) flags+='W'; if(s.flags&2) flags+='A'; if(s.flags&4) flags+='X';
             row(sections_,{utf(s.name),QString::number(s.type),hx(s.address),hx(s.offset),hx(s.size),flags+" "+hx(s.flags)});
         }
-        for(const auto& s:image_.symbols) {
-            const auto binding=s.info>>4;
-            const bool undefined=s.section==0;
-            const bool imported=undefined && s.dynamic && !s.name.empty() && (binding==1 || binding==2);
-            QString classification=imported ? "Imported / undefined" : undefined ? "Undefined" : s.section==0xfff1 ? "Absolute" : s.section==0xfff2 ? "Common" : "Defined";
-            row(symbols_,{utf(s.name),undefined ? "—" : hx(s.address),hx(s.size),s.dynamic ? "Dynamic" : "Static",QString::number(s.section),hx(s.info),hx(s.visibility),classification});
-            const int r=symbols_->rowCount()-1;
-            for(int column=0;column<symbols_->columnCount();++column) {
-                auto* item=symbols_->item(r,column);
-                item->setToolTip(imported ? "Undefined dynamic global/weak symbol: import candidate; library and runtime address unresolved." : classification);
-                if(undefined) {auto font=item->font();font.setItalic(true);item->setFont(font);}
-            }
+        for(int r=0;r<symbolModel_->rowCount();++r) {
+            QStringList values;for(int c=0;c<symbolModel_->columnCount();++c) values<<symbolModel_->data(symbolModel_->index(r,c)).toString();row(symbols_,values);
+            const auto* symbol=symbolModel_->symbol(r);
+            for(int c=0;c<symbols_->columnCount();++c){auto* item=symbols_->item(r,c);item->setToolTip(symbolModel_->data(symbolModel_->index(r,c),Qt::ToolTipRole).toString());if(symbol && !symbol->section){auto font=item->font();font.setItalic(true);item->setFont(font);}}
         }
         info_->setPlainText(QString("File: %1\nSize: %2 bytes\nFormat: ELF%3\nArchitecture: %4\nEndian: %5\nType: %6\nEntry point (ELF VA): %7\nHeader size: %8\nProgram headers: %9 at %10\nSection headers: %11 at %12\nSymbols: %13")
             .arg(path).arg(file_->size()).arg(image_.bits).arg(utf(image_.architecture())).arg(image_.littleEndian ? "Little" : "Big").arg(image_.type==3 ? "ET_DYN (link-time VAs; runtime load bias unknown)" : image_.type==2 ? "ET_EXEC" : QString::number(image_.type)).arg(hx(image_.entry)).arg(image_.headerSize).arg(image_.segments.size()).arg(hx(image_.programOffset)).arg(image_.sections.size()).arg(hx(image_.sectionOffset)).arg(image_.symbols.size()));
@@ -320,6 +326,7 @@ void Window::configureLimits() {
     }
 }
 void Window::updateFunctions() {
+    irText_->setPlainText("Select an analyzed function. IR is experimental.");pseudocode_->setPlainText("Select an analyzed function. No complete decompiler is available.");
     functionModel_->setRegistry(program_.registry);
     instructions_->setFunctions(program_.registry);
     referenceModel_->setReferences(program_.references.all());
@@ -380,6 +387,18 @@ bool Window::go(Location location,bool addHistory) {
         return true;
     } catch(const std::exception& e) {log(QString("Navigation failed: ")+e.what()); return false;}
 }
+void Window::goToFunction(){
+    if(!file_){statusBar()->showMessage("Open an ELF file first");return;}
+    GoToFunctionDialog dialog(functionModel_,symbolModel_,[this](uint64_t va){return navigateToFunction(va);},this);dialog.exec();
+}
+bool Window::navigateToFunction(uint64_t va){
+    if(!file_)return false;
+    AddressTranslator translator(image_,file_->size());auto mapping=translator.mapping(va);
+    if(!mapping || !mapping->executable || image_.machine!=62 || image_.bits!=64 || !image_.littleEndian){log("Go to Function rejected: address is not executable x86-64 ELF code: "+hx(va));return false;}
+    const auto* existing=instructions_->instruction(instructions_->rowForAddress(va));if(existing && existing->flow==FlowType::Invalid){log("Go to Function rejected: invalid encoding at "+hx(va));return false;}
+    if(existing && !program_.registry.containing(va)){startJob(loadedPath_,va,false);statusBar()->showMessage("Building function views on demand…");return true;}
+    return go({true,va},true);
+}
 bool Window::navigateToAddress(uint64_t va) {return go({true,va},true);}
 bool Window::navigateToOffset(uint64_t offset) {return go({false,offset},true);}
 bool Window::goBack() {
@@ -408,13 +427,19 @@ void Window::updateSelection() {
     if(const auto* f=program_.registry.containing(ins->address)) {
         if(displayedFunction_!=f->entry) {
             displayedFunction_=f->entry;
+            const auto& entries=functionModel_->registry().functions;auto entry=std::lower_bound(entries.begin(),entries.end(),f->entry,[](const auto& candidate,uint64_t va){return candidate.entry<va;});
+            if(entry!=entries.end() && entry->entry==f->entry){const int row=static_cast<int>(entry-entries.begin());functions_->setCurrentIndex(functionModel_->index(row,0));functions_->selectRow(row);functions_->scrollTo(functionModel_->index(row,0),QAbstractItemView::PositionAtCenter);}
+            auto ir=program_.ir.find(f->entry);
+            const bool displayIR=ir!=program_.ir.end() && ir->second.instructions.size()<=2048;
+            irText_->setPlainText(displayIR?utf(ir->second.listing+"\n"+ir->second.pseudocode):"IR unavailable or exceeds display limit (2048 instructions)");
+            pseudocode_->setPlainText(displayIR?utf(ir->second.cLike+"\n"+ir->second.pseudocode):"Pseudocode unavailable or exceeds display limit (2048 instructions)");
             auto graph=program_.graphs.find(f->entry);if(graph!=program_.graphs.end()) graph_->setGraph(graph->second);else graph_->setGraph({});
             std::vector<Reference> refs;for(const auto& r:program_.references.all())
                 if(std::binary_search(f->instructions.begin(),f->instructions.end(),r.from) || std::binary_search(f->instructions.begin(),f->instructions.end(),r.to)) refs.push_back(r);
             referenceModel_->setReferences(std::move(refs));
         }
     }
-    if(!program_.registry.containing(ins->address)) {displayedFunction_.reset();graph_->setGraph({});referenceModel_->setReferences(program_.references.all());}
+    if(!program_.registry.containing(ins->address)) {displayedFunction_.reset();irText_->setPlainText("No identified function at this address");pseudocode_->setPlainText("No identified function at this address");graph_->setGraph({});referenceModel_->setReferences(program_.references.all());}
     graph_->highlight(ins->address);
     QString references;
     for(const auto& ref:instructions_->analysis().references) if(ref.to==ins->address)
@@ -428,6 +453,9 @@ void Window::updateSelection() {
     }
 }
 void Window::copySelection() {
+    if(centralTabs_->currentWidget()==irText_) {irText_->copy();return;}
+    if(centralTabs_->currentWidget()==pseudocode_) {pseudocode_->copy();return;}
+    if(centralTabs_->currentWidget()==processView_) {processView_->copySelection();return;}
     if(centralTabs_->currentIndex()==1) {hex_->copy();return;}
     QString text; auto rows=assembly_->selectionModel()->selectedRows();
     std::sort(rows.begin(),rows.end(),[](const QModelIndex& a,const QModelIndex& b){return a.row()<b.row();});

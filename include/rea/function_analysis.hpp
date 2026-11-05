@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 #include "rea/analysis.hpp"
+#include "rea/ir.hpp"
 #include <set>
 namespace rea {
 enum class FunctionConfidence { Confirmed, Probable, Unknown };
 const char* functionConfidenceName(FunctionConfidence);
+enum class FunctionOrigin { ElfSymbol, EntryPoint, DirectCall, UserRequested, Unknown };
+const char* functionOriginName(FunctionOrigin);
 struct FunctionDescriptor {
     uint64_t entry{}, end{}, declaredEnd{};
     std::string name, evidence;
@@ -12,6 +15,8 @@ struct FunctionDescriptor {
     std::vector<uint64_t> instructions;
     bool overlap{}, hasReturn{};
     size_t duplicateEntries{};
+    FunctionOrigin origin{FunctionOrigin::Unknown};
+    std::string demangledName;
 };
 struct FunctionRegistry {
     std::vector<FunctionDescriptor> functions;
@@ -53,6 +58,8 @@ struct ProgramAnalysis {
     FunctionRegistry registry;
     std::map<uint64_t,ControlFlowGraph> graphs;
     ReferenceIndex references;
+    std::map<uint64_t,IRFunction> ir;
+    StopReason irStopReason{StopReason::None};
 };
 ProgramAnalysis analyzeProgram(const Image&,uint64_t,const AnalysisResult&,AnalysisControl&);
 }

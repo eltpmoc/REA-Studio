@@ -9,14 +9,14 @@ AnalysisResult DisassemblyEngine::analyze(BinaryFile& file,const Image& image,st
     AnalysisControl control(limits);
     return analyze(file,image,control,requested);
 }
-AnalysisResult DisassemblyEngine::analyze(BinaryFile& file,const Image& image,AnalysisControl& control,std::optional<uint64_t> requested) const {
+AnalysisResult DisassemblyEngine::analyze(BinaryFile& file,const Image& image,AnalysisControl& control,std::optional<uint64_t> requested,const AnalysisResult* baseline) const {
     AnalysisResult result;
     struct Seed { uint64_t va; Confidence confidence; std::string reason; };
     std::deque<Seed> pending;
     std::map<uint64_t,std::string> metadataSeeds;
     std::map<uint64_t,Instruction> decoded;
     std::set<uint64_t> visited,scheduled;
-    size_t conflicts=0;
+    size_t conflicts=0;bool baselineLoaded=baseline==nullptr;
     try {
         control.checkpoint(); control.reserveMemory(8192);
         if(image.bits!=64 || image.machine!=62 || !image.littleEndian || (image.type!=2 && image.type!=3)) {
@@ -26,6 +26,23 @@ AnalysisResult DisassemblyEngine::analyze(BinaryFile& file,const Image& image,An
             result.diagnostics.push_back("Disassembly refused: more than 256 program headers exceeds the analysis resource budget."); return result;
         }
         AddressTranslator translator(image,file.size());
+        if(baseline) {
+            if(!requested) throw std::runtime_error("Incremental analysis requires an executable target");
+            auto target=translator.mapping(*requested);if(!target || !target->executable) throw std::runtime_error("Requested VA is not executable");
+            for(const auto& old:baseline->instructions) {
+                control.work();control.reserveMemory(4096+2*(old.evidence.size()+old.operands.size()+old.mnemonic.size()+old.dataReferences.size()*sizeof(uint64_t)));
+                if(!old.size || old.offset>UINT64_MAX-old.size || old.address>UINT64_MAX-old.size || old.bytes.size()!=old.size) throw std::runtime_error("Invalid baseline instruction");
+                for(uint64_t n=0;n<old.size;++n){control.checkpoint();auto mapping=translator.mapping(old.address+n);if(!mapping || !mapping->executable || mapping->offset!=old.offset+n)throw std::runtime_error("File mappings changed; reopen the project");}
+                if(file.read(old.offset,old.size)!=old.bytes) throw std::runtime_error("File bytes changed; reopen the project");
+                if(!decoded.empty() && (old.address<=decoded.rbegin()->first || old.address-decoded.rbegin()->first<decoded.rbegin()->second.size)) throw std::runtime_error("Conflicting baseline boundaries");
+                decoded.emplace(old.address,old);visited.insert(old.address);
+            }
+            result.limited=baseline->limited;
+            for(const auto& diagnostic:baseline->diagnostics){control.work();control.reserveMemory(128+2*diagnostic.size());result.diagnostics.push_back(diagnostic.starts_with("Previous analysis: ")?diagnostic:"Previous analysis: "+diagnostic);}
+            for(const auto& ref:baseline->references){control.work();control.reserveMemory(128);result.references.push_back(ref);}
+            for(auto va:baseline->requestedEntries){control.work();control.reserveMemory(16);result.requestedEntries.push_back(va);}
+        }
+        baselineLoaded=true;
         auto enqueue=[&](uint64_t va,Confidence confidence,const std::string& reason,bool front=false){
             control.work();
             if(scheduled.contains(va)) return;
@@ -34,15 +51,16 @@ AnalysisResult DisassemblyEngine::analyze(BinaryFile& file,const Image& image,An
             if(front) pending.push_front({va,confidence,reason}); else pending.push_back({va,confidence,reason});
         };
         control.reserveMemory(256); metadataSeeds.emplace(image.entry,"ELF entry point");
-        enqueue(image.entry,Confidence::Confirmed,"ELF entry point");
+        if(!baseline) enqueue(image.entry,Confidence::Confirmed,"ELF entry point");
         for(const auto& s:image.symbols) {
             control.work();
             if((s.info&15)!=2 || !s.section || s.section>=image.sections.size() || metadataSeeds.contains(s.address)) continue;
             control.reserveMemory(512+4*static_cast<uint64_t>(s.name.size()));
             auto reason="Defined STT_FUNC symbol: "+s.name;
-            metadataSeeds.emplace(s.address,reason); enqueue(s.address,Confidence::Confirmed,reason);
+            metadataSeeds.emplace(s.address,reason); if(!baseline) enqueue(s.address,Confidence::Confirmed,reason);
         }
         if(requested) {
+            control.reserveMemory(16);if((!baseline || !decoded.contains(*requested)) && std::find(result.requestedEntries.begin(),result.requestedEntries.end(),*requested)==result.requestedEntries.end())result.requestedEntries.push_back(*requested);
             // Explicit requests take precedence even when they coincide with a metadata seed.
             control.reserveMemory(512);
             pending.push_front({*requested,Confidence::Probable,"User requested decode; code not confirmed"});
@@ -104,6 +122,7 @@ AnalysisResult DisassemblyEngine::analyze(BinaryFile& file,const Image& image,An
         }
         control.checkpoint();
     } catch(const AnalysisStopped& stopped) {
+        if(!baselineLoaded) throw;
         result.stopReason=stopped.reason(); result.limited=stopped.reason()!=StopReason::Cancelled;
         result.diagnostics.emplace_back(stopReasonName(stopped.reason()));
     }

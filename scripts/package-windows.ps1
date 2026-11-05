@@ -23,7 +23,7 @@ Assert-Native 'CTest Windows Release'
 python (Join-Path $PSScriptRoot 'release.py') source --output $Output
 Assert-Native 'Source/license audit'
 $outDir = (Resolve-Path $Output).Path
-$base = 'REA-Studio-v0.3.0-alpha-Windows-x64'
+$base = 'REA-Studio-v0.3.2-alpha-Windows-x64'
 $stagingParent = Join-Path $buildDir ('package-' + [Guid]::NewGuid().ToString('N'))
 $stage = Join-Path $stagingParent $base
 cmake --install $buildDir --config Release --prefix $stage
@@ -31,7 +31,7 @@ Assert-Native 'Install Windows'
 $bin = Join-Path $stage 'bin'
 $exe = Join-Path $bin 'rea-studio.exe'
 # Restrict deployment to QtBase; do not redistribute developer CRT DLLs.
-& (Join-Path $qt 'bin/windeployqt.exe') --release --no-plugins --no-translations --no-compiler-runtime --no-opengl-sw --no-system-d3d-compiler --dir $bin $exe
+& (Join-Path $qt 'bin/windeployqt.exe') --release --no-plugins --skip-plugin-types generic --no-translations --no-compiler-runtime --no-opengl-sw --no-system-d3d-compiler --dir $bin $exe
 Assert-Native 'windeployqt'
 $platforms = Join-Path $bin 'platforms'
 New-Item -ItemType Directory -Force $platforms | Out-Null
@@ -57,7 +57,7 @@ if (Get-ChildItem $bin -Recurse -File | Where-Object { $_.Name -match '^(vcrunti
 $shared = Join-Path $stage 'share/rea-studio'
 $sources = Join-Path $shared 'sources'
 New-Item -ItemType Directory -Force $sources | Out-Null
-Copy-Item (Join-Path $outDir 'REA-Studio-v0.3.0-alpha-Source.tar.gz') $sources
+Copy-Item (Join-Path $outDir 'REA-Studio-v0.3.2-alpha-Source.tar.gz') $sources
 Copy-Item $qtArchive $sources
 python (Join-Path $PSScriptRoot 'release.py') qt-notices --qt-source $qtArchive --output (Join-Path $shared 'licenses/Qt')
 Assert-Native 'Qt SHA-256 and notices'

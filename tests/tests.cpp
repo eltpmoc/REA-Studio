@@ -6,6 +6,10 @@
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
+#ifdef _WIN32
+#include <windows.h>
+#include <winioctl.h>
+#endif
 using namespace rea;
 namespace {
 void check(bool value,const char* message) {if(!value) throw std::runtime_error(message);}
@@ -38,6 +42,23 @@ struct Fixture {
 };
 void write(const std::filesystem::path& p,const std::vector<uint8_t>& bytes) {
     std::ofstream f(p,std::ios::binary); f.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size())); check(bool(f),"write fixture");
+}
+void writeLargeFixture(const std::filesystem::path& path) {
+    {std::ofstream out(path,std::ios::binary);check(bool(out),"create large fixture");}
+#ifdef _WIN32
+    // NTFS needs an explicit sparse flag before extending the file. Otherwise
+    // writing its final byte physically fills 5 GiB and can time out in CTest.
+    const auto handle=CreateFileW(path.c_str(),GENERIC_WRITE,0,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    check(handle!=INVALID_HANDLE_VALUE,"open sparse fixture handle");
+    DWORD returned=0;
+    const auto sparse=DeviceIoControl(handle,FSCTL_SET_SPARSE,nullptr,0,nullptr,0,&returned,nullptr);
+    CloseHandle(handle);
+    check(sparse!=FALSE,"large fixture requires a filesystem supporting sparse files");
+#endif
+    // Open the existing file without truncation, preserving its sparse flag.
+    std::fstream out(path,std::ios::in|std::ios::out|std::ios::binary);
+    out.seekp(static_cast<std::streamoff>((uint64_t{5}<<30)-1));out.put('Z');
+    out.flush();check(bool(out),"large sparse fixture");
 }
 }
 int main(int argc,char** argv) {
@@ -79,8 +100,8 @@ int main(int argc,char** argv) {
             {auto x=fixture; x.put(128+3*(wide ? 64 : 40)+4,11,4); write(path,x.bytes); BinaryFile f(path); check(ElfLoader{}.load(f).symbols[1].dynamic,"dynamic symbols");}
         }
         auto large=dir/"large.bin";
-        {std::ofstream out(large,std::ios::binary); out.seekp(static_cast<std::streamoff>((uint64_t{5}<<30)-1)); out.put('Z'); check(bool(out),"large sparse fixture");}
-        {BinaryFile f(large); check(f.size()==(uint64_t{5}<<30),"64-bit file size"); check(hexRow(f,f.size()-1,1).find("|Z|")!=std::string::npos,"large file navigation");}
+        writeLargeFixture(large);
+        {BinaryFile f(large); check(f.size()==(uint64_t{5}<<30),"64-bit file size"); check(f.read(uint64_t{1}<<32,1)==std::vector<uint8_t>{0},"sparse hole beyond 4 GiB"); check(hexRow(f,f.size()-1,1).find("|Z|")!=std::string::npos,"large file navigation");}
         if(argc==2) {BinaryFile f(argv[1]); auto im=ElfLoader{}.load(f); check(!im.sections.empty() && !im.segments.empty(),"system ELF"); std::cout<<argv[1]<<": "<<im.sections.size()<<" sections, "<<im.symbols.size()<<" symbols\n";}
         std::filesystem::remove_all(dir); std::cout<<"PASS: four class/endian combinations, "<<rejected<<" malformed fixtures, extended headers, static/dynamic symbols, sparse 5 GiB navigation\n"; return 0;
     }catch(const std::exception& e){std::cerr<<"FAIL: "<<e.what()<<"\nFixtures: "<<dir<<'\n'; return 1;}

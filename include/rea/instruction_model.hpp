@@ -17,9 +17,10 @@ public:
     void setFunctions(const FunctionRegistry&);
     const Instruction* instruction(int row) const;
     int rowForAddress(uint64_t va) const;
-    const AnalysisResult& analysis() const {return result_;}
+    const AnalysisResult& analysis() const {return *result_;}
+    std::shared_ptr<const AnalysisResult> snapshot() const {return result_;}
 private:
-    AnalysisResult result_;
+    std::shared_ptr<const AnalysisResult> result_{std::make_shared<AnalysisResult>()};
     std::vector<QString> comments_;
     std::map<uint64_t,QString> functions_;
     std::map<uint64_t,size_t> incoming_,outgoing_;

@@ -3,6 +3,19 @@
 #include "rea/function_analysis.hpp"
 #include <QAbstractTableModel>
 namespace rea {
+enum NavigationRole {NavAddressRole=Qt::UserRole,NavOriginalRole,NavDemangledRole,NavSizeRole,NavOriginRole,NavConfidenceRole,NavSearchRole,NavFunctionRole};
+class SymbolModel final : public QAbstractTableModel {
+public:
+    using QAbstractTableModel::QAbstractTableModel;
+    int rowCount(const QModelIndex& p={}) const override {return p.isValid()?0:static_cast<int>(symbols_.size());}
+    int columnCount(const QModelIndex& p={}) const override {return p.isValid()?0:8;}
+    QVariant data(const QModelIndex&,int role=Qt::DisplayRole) const override;
+    QVariant headerData(int,Qt::Orientation,int) const override;
+    void setImage(const Image&);
+    const Symbol* symbol(int) const;
+    bool isFunction(int) const;
+private:std::vector<Symbol> symbols_;size_t sections_{};
+};
 class FunctionModel final : public QAbstractTableModel {
 public:
     using QAbstractTableModel::QAbstractTableModel;
@@ -10,6 +23,8 @@ public:
     int columnCount(const QModelIndex& p={}) const override {return p.isValid()?0:5;}
     QVariant data(const QModelIndex&,int role=Qt::DisplayRole) const override;
     QVariant headerData(int,Qt::Orientation,int) const override;
+    const FunctionDescriptor* function(int row) const;
+    const FunctionRegistry& registry() const {return registry_;}
     void setRegistry(FunctionRegistry registry) {beginResetModel();registry_=std::move(registry);endResetModel();}
 private: FunctionRegistry registry_;
 };

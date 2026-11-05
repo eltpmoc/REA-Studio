@@ -5,11 +5,11 @@
 #include <QFontDatabase>
 #include <algorithm>
 namespace rea {
-int InstructionModel::rowCount(const QModelIndex& parent) const {return parent.isValid() ? 0 : static_cast<int>(result_.instructions.size());}
+int InstructionModel::rowCount(const QModelIndex& parent) const {return parent.isValid() ? 0 : static_cast<int>(result_->instructions.size());}
 int InstructionModel::columnCount(const QModelIndex& parent) const {return parent.isValid() ? 0 : 5;}
 const Instruction* InstructionModel::instruction(int row) const {
-    if(row<0 || static_cast<size_t>(row)>=result_.instructions.size()) return nullptr;
-    return &result_.instructions[static_cast<size_t>(row)];
+    if(row<0 || static_cast<size_t>(row)>=result_->instructions.size()) return nullptr;
+    return &result_->instructions[static_cast<size_t>(row)];
 }
 QVariant InstructionModel::headerData(int section,Qt::Orientation orientation,int role) const {
     if(role!=Qt::DisplayRole) return {};
@@ -63,13 +63,13 @@ QVariant InstructionModel::data(const QModelIndex& index,int role) const {
     return {};
 }
 void InstructionModel::setAnalysis(AnalysisResult result,const Image& image) {
-    beginResetModel(); result_=std::move(result); comments_.clear();
+    beginResetModel(); result_=std::make_shared<AnalysisResult>(std::move(result)); comments_.clear();
     functions_.clear();incoming_.clear();outgoing_.clear();
     functions_[image.entry]="entry";
     for(const auto& symbol:image.symbols) if((symbol.info&15)==2 && symbol.section && symbol.section<image.sections.size()) functions_[symbol.address]=QString::fromStdString(symbol.name);
     SymbolResolver symbols(image);
-    for(const auto& ref:result_.references) {++incoming_[ref.to];++outgoing_[ref.from];}
-    for(const auto& ins:result_.instructions) {
+    for(const auto& ref:result_->references) {++incoming_[ref.to];++outgoing_[ref.from];}
+    for(const auto& ins:result_->instructions) {
         QString text=QString::fromStdString(symbols.at(ins.address));
         if(!text.isEmpty()) text+=" — ";
         text+=QString::fromUtf8(confidenceName(ins.confidence))+": "+QString::fromStdString(ins.evidence);
@@ -83,14 +83,14 @@ void InstructionModel::setAnalysis(AnalysisResult result,const Image& image) {
     endResetModel();
 }
 void InstructionModel::setFunctions(const FunctionRegistry& registry) {
-    for(const auto& f:registry.functions) functions_[f.entry]=QString::fromStdString(f.name)+" ["+functionConfidenceName(f.confidence)+"]";
+    for(const auto& f:registry.functions) functions_[f.entry]=QString::fromStdString(f.demangledName.empty()?f.name:f.demangledName)+" ["+functionConfidenceName(f.confidence)+"]";
     if(rowCount()) emit dataChanged(index(0,0),index(rowCount()-1,4));
 }
 void InstructionModel::setDark(bool dark) {
     dark_=dark; if(rowCount()) emit dataChanged(index(0,0),index(rowCount()-1,4),{Qt::ForegroundRole,Qt::BackgroundRole,DarkRole});
 }
 int InstructionModel::rowForAddress(uint64_t va) const {
-    auto it=std::lower_bound(result_.instructions.begin(),result_.instructions.end(),va,[](const Instruction& i,uint64_t v){return i.address<v;});
-    return it!=result_.instructions.end() && it->address==va ? static_cast<int>(it-result_.instructions.begin()) : -1;
+    auto it=std::lower_bound(result_->instructions.begin(),result_->instructions.end(),va,[](const Instruction& i,uint64_t v){return i.address<v;});
+    return it!=result_->instructions.end() && it->address==va ? static_cast<int>(it-result_->instructions.begin()) : -1;
 }
 }

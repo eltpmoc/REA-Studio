@@ -27,9 +27,23 @@ BackendResult InProcessAnalysisBackend::analyze(BinaryFile& file,const Image& im
     X86InstructionDecoder decoder;BackendResult result;
     result.assembly=DisassemblyEngine(decoder).analyze(file,image,control,requested);
     if(result.assembly.stopReason==StopReason::None) {
-        try {result.program=analyzeProgram(image,file.size(),result.assembly,control);}
+        try {result.program=analyzeProgram(image,file.size(),result.assembly,control);
+            if(result.program.irStopReason!=StopReason::None){result.assembly.stopReason=result.program.irStopReason;result.assembly.limited=true;result.assembly.diagnostics.push_back(std::string("IR incomplete; validated functions/CFG preserved: ")+stopReasonName(result.program.irStopReason));}
+        }
         catch(const AnalysisStopped& e) {result.assembly.stopReason=e.reason();result.assembly.limited=e.reason()!=StopReason::Cancelled;result.assembly.diagnostics.emplace_back(stopReasonName(e.reason()));}
     }
     return result;
 }
+BackendResult InProcessAnalysisBackend::analyzeIncremental(BinaryFile& file,const Image& image,AnalysisControl& control,std::stop_token token,uint64_t requested,const AnalysisResult& baseline) const {
+    std::stop_callback cancellation(token,[&control]{control.cancel();});X86InstructionDecoder decoder;BackendResult result;
+    result.assembly=DisassemblyEngine(decoder).analyze(file,image,control,requested,&baseline);
+    if(result.assembly.stopReason==StopReason::None || result.assembly.stopReason==StopReason::InstructionLimit) {
+        try {
+            result.program=analyzeProgram(image,file.size(),result.assembly,control);
+            if(result.program.irStopReason!=StopReason::None){result.assembly.stopReason=result.program.irStopReason;result.assembly.limited=true;result.assembly.diagnostics.push_back(std::string("IR incomplete: ")+stopReasonName(result.program.irStopReason));}
+        } catch(const AnalysisStopped& e){result.assembly.stopReason=e.reason();result.assembly.limited=e.reason()!=StopReason::Cancelled;result.assembly.diagnostics.emplace_back(stopReasonName(e.reason()));}
+    }
+    return result;
+}
+
 }

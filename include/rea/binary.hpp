@@ -21,6 +21,7 @@ struct Symbol {
     uint32_t section{};
     uint8_t info{}, visibility{};
     bool dynamic{};
+    std::string demangledName;
 };
 struct Segment { uint32_t type{}, flags{}; uint64_t offset{}, address{}, fileSize{}, memorySize{}; };
 struct Image {
