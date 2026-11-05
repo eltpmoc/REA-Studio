@@ -15,7 +15,7 @@ import tarfile
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.3.0-alpha"
+VERSION = "0.3.2-alpha"
 SOURCE_NAME = f"REA-Studio-v{VERSION}-Source"
 ROOT_FILES = {".gitignore", ".gitattributes", "CMakeLists.txt", "CMakePresets.json", "README.md", "CHANGELOG.md", "LICENSE", "THIRD_PARTY_NOTICES.md", "COPYING.md"}
 SOURCE_DIRS = {"src", "include", "tests", "fuzz", "docs", "third_party", "scripts", "packaging", "licenses", ".github"}
