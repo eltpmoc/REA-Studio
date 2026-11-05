@@ -149,6 +149,16 @@ jobs:
         with:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y cmake build-essential clang qt6-base-dev qt6-base-dev-tools libgl1-mesa-dev python3
+      # Qt 6.4's QProcess uses clone(CLONE_VM) and crashes the TSan runtime.
+      # Qt 6.8 detects __interceptor_vfork and uses fork for instrumented callers.
+      - name: Qt with sanitizer-aware process launching
+        if: matrix.mode == 'thread'
+        uses: jurplel/install-qt-action@d325aaf2a8baeeda41ad0b5d39f84a6af9bcf005 # v4.3.0
+        with:
+          version: '6.8.3'
+          arch: linux_gcc_64
+          archives: qtbase
+          cache: true
       - run: python3 scripts/release.py audit
       - name: Configure instrumentation
         shell: bash
@@ -158,7 +168,7 @@ jobs:
           else
             rea_sanitizers=address,undefined
           fi
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_FLAGS="-fsanitize=$rea_sanitizers -fno-omit-frame-pointer" -DCMAKE_CXX_FLAGS="-fsanitize=$rea_sanitizers -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=$rea_sanitizers"
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR:-}" -DCMAKE_C_FLAGS="-fsanitize=$rea_sanitizers -fno-omit-frame-pointer" -DCMAKE_CXX_FLAGS="-fsanitize=$rea_sanitizers -fno-omit-frame-pointer" -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=$rea_sanitizers"
       - name: Build and test required sanitizer scope
         shell: bash
         run: |

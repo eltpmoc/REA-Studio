@@ -62,6 +62,10 @@ if(BUILD_TESTING)
   if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_executable(rea_navigation_fixture tests/navigation_fixture.cpp)
     target_compile_options(rea_navigation_fixture PRIVATE -O0 -g -fno-inline -fno-omit-frame-pointer)
+    # This executable is input data, never a test runner. Keep its four small
+    # functions free of sanitizer runtime code; the analyzer/tests stay instrumented.
+    target_compile_options(rea_navigation_fixture PRIVATE -fno-sanitize=all)
+    target_link_options(rea_navigation_fixture PRIVATE -fno-sanitize=all)
     set(REA_NAVIGATION_FIXTURE "$<TARGET_FILE:rea_navigation_fixture>")
   endif()
   add_test(NAME function_navigation COMMAND rea_function_navigation_tests ${REA_NAVIGATION_FIXTURE} ${CMAKE_CURRENT_BINARY_DIR})

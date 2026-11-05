@@ -1,4 +1,4 @@
-# REA Studio v0.3.1-alpha
+# REA Studio v0.3.2-alpha
 
 Disassembler estático open source em **C++20 e Qt 6 Widgets**. Também lista processos e permite leitura hexadecimal de memória virtual em execução. Inspeciona ELF32/ELF64 e decodifica **x86-64 little endian ELF ET_EXEC/ET_DYN** com Zydis. Não executa os binários analisados. Ainda não oferece decompilação completa: há IR e pseudocódigo de máquina experimentais, com subconjunto e operações opacas explícitos.
 
