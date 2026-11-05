@@ -163,8 +163,8 @@ jobs:
         shell: bash
         run: |
           if [ '${{ matrix.mode }}' = thread ]; then
-            cmake --build build --target rea_analysis_tests rea_worker_tests rea_tests rea_program_tests rea_process_tests rea_ir_tests rea_navigation_analysis_tests rea_semantic_tests rea_flow_tests --parallel 2
-            ctest --test-dir build -R '^(generate_fixture|analysis_control|analysis_worker_controller|program_analysis|process_memory|intermediate_representation|incremental_function_analysis|semantic_ir|control_flow_facts)$' --output-on-failure --output-junit sanitizer-tests.xml
+            cmake --build build --target rea_analysis_tests rea_worker_tests rea_tests rea_program_tests rea_process_tests rea_ir_tests rea_navigation_analysis_tests rea_semantic_tests rea_flow_tests rea_region_tests --parallel 2
+            ctest --test-dir build -R '^(generate_fixture|analysis_control|analysis_worker_controller|program_analysis|process_memory|intermediate_representation|incremental_function_analysis|semantic_ir|control_flow_facts|control_flow_regions)$' --output-on-failure --output-junit sanitizer-tests.xml
           else
             cmake --build build --parallel 2
             ctest --test-dir build --output-on-failure --output-junit sanitizer-tests.xml

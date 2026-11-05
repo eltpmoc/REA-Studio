@@ -163,6 +163,10 @@ ProgramAnalysis analyzeProgram(const Image& image,uint64_t size,const AnalysisRe
         ir.listing+="\nCFG facts (conservative; not source-level structures):\n";
         for(const auto& [node,doms]:facts.dominators){control.work();ir.listing+="block "+std::to_string(node)+" dominators:";for(auto d:doms)ir.listing+=" "+std::to_string(d);ir.listing+="\n";}
         for(const auto& loop:facts.loops){control.work();ir.listing+="natural loop header "+std::to_string(loop.header)+", blocks="+std::to_string(loop.body.size())+"\n";}
+        for(const auto& region:recoverControlFlowRegions(graph,control)) {
+            control.work();const char* kind=region.kind==RegionKind::IfElse?"if/else":region.kind==RegionKind::While?"while":"do/while";
+            ir.listing+="Structural region "+std::string(kind)+": entry="+std::to_string(region.entry)+", condition="+std::to_string(region.condition)+", exit="+std::to_string(region.exit)+" (machine condition; source variables not recovered)\n";
+        }
         if(facts.postDominators.empty())ir.listing+="Postdominators unavailable (cycle or unknown exit).\n";
         p.ir.emplace(entry,std::move(ir));
     }
